@@ -1,0 +1,7 @@
+numpy
+scipy
+pycolmap>=0.6
+telemetry-parser
+matplotlib
+opencv-python  # video_gyro_sync only
+pytest         # tests only
