@@ -39,6 +39,8 @@ def main(argv=None) -> int:
     ap.add_argument("--group", default=None, help="file-name template of the camera to use, e.g. 'lens0_#.jpg' (default: the one with most images)")
     ap.add_argument("--name-regex", default=r"(\d+)", help="regex whose last integer match in the file name is the frame index")
     ap.add_argument("--index-base", type=int, default=0, help="subtract this from the parsed index (1 for 1-based names)")
+    ap.add_argument("--window", type=float, default=8.5,
+                    help="cut contiguous runs into blocks of at most this many seconds (0: no cut; default 8.5)")
     ap.add_argument("--max-frames", type=int, default=2500, help="subsample frames above this count")
     ap.add_argument("--bootstrap", type=int, default=100)
     ap.add_argument("--out", type=Path, default=None, help="result JSON")
@@ -64,7 +66,7 @@ def main(argv=None) -> int:
         IDX, Rwc, P = IDX[::step], Rwc[::step], P[::step]
         log(f"subsampling 1 frame in {step}: {len(IDX)} frames")
 
-    est = InertialEstimator(tg, gyr, acc, IDX, Rwc, P)
+    est = InertialEstimator(tg, gyr, acc, IDX, Rwc, P, window_s=args.window)
     if frame_times is not None:
         est.set_time_map(1.0, 0.0)
         est.fit_time_map(1.0, offset_range=(-0.2, 0.2), period_tol=0.0005)   # only a small offset/clock refinement

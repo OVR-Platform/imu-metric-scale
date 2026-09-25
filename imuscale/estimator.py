@@ -50,10 +50,10 @@ class InertialEstimator:
     """tg, gyr [rad/s], acc [m/s^2]: IMU samples. IDX: frame indices (float ok). Rwc: (n,3,3) rotations
     camera->model. P: (n,3) camera centres in model units."""
 
-    def __init__(self, tg, gyr, acc, IDX, Rwc, P, max_gap_s=1.2, min_run=5):
+    def __init__(self, tg, gyr, acc, IDX, Rwc, P, max_gap_s=1.2, min_run=5, window_s=8.5):
         self.tg, self.gyr, self.acc = np.asarray(tg, float), np.asarray(gyr, float), np.asarray(acc, float)
         self.IDX, self.Rwc, self.P = np.asarray(IDX, float), np.asarray(Rwc, float), np.asarray(P, float)
-        self.max_gap_s, self.min_run = max_gap_s, min_run
+        self.max_gap_s, self.min_run, self.window_s = max_gap_s, min_run, window_s
         dqm = Rot.from_rotvec(self.gyr[:-1] * np.diff(self.tg)[:, None]).as_matrix()
         Rc = np.empty((len(self.tg), 3, 3)); Rc[0] = np.eye(3)
         for i in range(len(dqm)):                      # cumulative gyro orientation
@@ -185,7 +185,9 @@ class InertialEstimator:
         return self._pc[k]
 
     def make_runs(self):
-        """Contiguous runs: maximal sequences of intervals shorter than max_gap_s."""
+        """Contiguous runs: maximal sequences of intervals shorter than max_gap_s, cut into consecutive
+        blocks of at most `window_s` seconds (0: no cut), so that a recording without gaps still yields
+        several runs. Short windows bias the scale low, so the default (8.5 s) is the one validated."""
         runs, cur = [], []
         for k in range(len(self.T) - 1):
             if self.T[k + 1] - self.T[k] <= self.max_gap_s:
@@ -196,6 +198,16 @@ class InertialEstimator:
                 cur = []
         if len(cur) >= self.min_run:
             runs.append(cur)
+        if self.window_s:
+            cut = []
+            for rr in runs:
+                cur = []
+                for k in rr:
+                    if cur and self.T[k + 1] - self.T[cur[0]] > self.window_s:
+                        cut.append(cur); cur = []
+                    cur.append(k)
+                cut.append(cur)
+            runs = [rr for rr in cut if len(rr) >= self.min_run]
         return runs
 
     def solve(self, runs):

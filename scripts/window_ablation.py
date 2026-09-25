@@ -44,7 +44,7 @@ def main(argv=None) -> int:
     tg, gyr, acc, _ = load_imu(args.imu)
     tg = tg - args.imu_offset
     _, _, IDX, Rwc, P, _ = load_frames(args.sparse, args.group, index_base=args.index_base)
-    est = InertialEstimator(tg, gyr, acc, IDX, Rwc, P)
+    est = InertialEstimator(tg, gyr, acc, IDX, Rwc, P, window_s=0)   # contiguous runs; windows are built below
     est.fit_time_map(args.period)
     runs, s_joint, *_ = est.robust_solve()
     variants = [("joint (whole survey)", None), ("contiguous runs", ("contiguous",)),

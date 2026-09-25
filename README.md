@@ -33,6 +33,8 @@ python -m imuscale.scale --sparse model/sparse/0 --imu recording.insv --period 0
   integer, 0-based).
 * `--group`: for multi-camera rigs, which camera to use, given as the file-name template with the index
   replaced by `#` (e.g. `lens0_#.jpg`); default: the group with most images.
+* `--window`: runs are cut into windows of at most this many seconds before the per-run estimation
+  (default 8.5; 0 keeps the contiguous runs as they are).
 * `--imu-offset`: IMU time of video t=0, in seconds. Needed when the video was trimmed without
   rewriting the IMU record (e.g. cut to a common start with an edit list): the IMU keeps the original
   timeline, so pass the cut point.
@@ -67,7 +69,9 @@ whether the camera-IMU delay is the same on both.
 2. **Preintegration** of the accelerometer over each frame interval, with first-order bias Jacobians.
 3. **Linear system** in scale, gravity, accelerometer bias and per-frame velocities, solved through
    sparse normal equations; a robust pass drops intervals with residual above five times the median.
-4. **Per-run estimation.** Velocities are chained only within contiguous runs of frames (gap < 1.2 s).
+4. **Per-run estimation.** Velocities are chained only within contiguous runs of frames (gap < 1.2 s),
+   and runs are cut into consecutive windows of at most 8.5 s (`--window`), so that a recording
+   without gaps still gives several independent estimates. Much shorter windows bias the scale low.
    Solving the whole survey jointly, with gravity and bias shared, is biased high (3.4% on ten surveys
    with external reference); each run is therefore solved separately and the survey scale is the mean
    of the per-run scales. The joint solution is reported as a diagnostic.

@@ -19,7 +19,7 @@ from imuscale.estimator import InertialEstimator, estimate  # noqa: E402
 G = np.array([0.0, 0.0, -9.81])   # gravity acceleration, world frame (down = -Z)
 
 
-def synth(duration=90.0, rate=1000.0, frame_dt=0.1, s_true=0.42, offset=0.37, seed=0):
+def synth(duration=90.0, rate=1000.0, frame_dt=0.1, s_true=0.42, offset=0.37, seed=0, gaps=True):
     rng = np.random.default_rng(seed)
     t = np.arange(0, duration, 1 / rate)
     # position: sum of sines, walking-like (~1 m/s) with vertical bob
@@ -39,7 +39,8 @@ def synth(duration=90.0, rate=1000.0, frame_dt=0.1, s_true=0.42, offset=0.37, se
     R_BC = R_CB.T
     fidx = np.arange(0, int(duration / frame_dt) - 3)
     # drop 15 frames every 100 (a sharpness filter would do this) so that the survey splits into contiguous runs
-    fidx = fidx[(fidx % 100) >= 15]
+    if gaps:
+        fidx = fidx[(fidx % 100) >= 15]
     tf = fidx * frame_dt + offset
     ii = np.searchsorted(t, tf)
     Rwc = np.einsum("nij,jk->nik", R_WB[ii], R_BC)
@@ -47,8 +48,8 @@ def synth(duration=90.0, rate=1000.0, frame_dt=0.1, s_true=0.42, offset=0.37, se
     return t, gyr, acc, fidx.astype(float), Rwc, P, dict(s=s_true, offset=offset, R_CB=R_CB, frame_dt=frame_dt)
 
 
-def test_recovers_scale_gravity_and_rotation():
-    t, gyr, acc, IDX, Rwc, P, truth = synth()
+def test_recovers_scale_gravity_and_rotation(gaps=True):
+    t, gyr, acc, IDX, Rwc, P, truth = synth(gaps=gaps)
     est = InertialEstimator(t, gyr, acc, IDX, Rwc, P)
     a, b, R_CB, he = est.fit_time_map(truth["frame_dt"] * 1.002)      # start 0.2% off the true period
     assert abs(a / truth["frame_dt"] - 1) < 2e-4, a
@@ -63,6 +64,13 @@ def test_recovers_scale_gravity_and_rotation():
     assert r["quality"]["ok"], r["quality"]
 
 
+
+def test_recording_without_gaps():
+    """A single contiguous run must be cut into windows and pass, not fall back to the joint fit."""
+    test_recovers_scale_gravity_and_rotation(gaps=False)
+
+
 if __name__ == "__main__":
     test_recovers_scale_gravity_and_rotation()
+    test_recording_without_gaps()
     print("ok")
