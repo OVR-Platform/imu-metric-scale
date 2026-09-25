@@ -33,10 +33,28 @@ python -m imuscale.scale --sparse model/sparse/0 --imu recording.insv --period 0
   integer, 0-based).
 * `--group`: for multi-camera rigs, which camera to use, given as the file-name template with the index
   replaced by `#` (e.g. `lens0_#.jpg`); default: the group with most images.
+* `--imu-offset`: IMU time of video t=0, in seconds. Needed when the video was trimmed without
+  rewriting the IMU record (e.g. cut to a common start with an edit list): the IMU keeps the original
+  timeline, so pass the cut point.
 * `--write-model DIR`: write a scaled and levelled copy (gravity onto `--down`, default -Z; first frame
   at the origin), only if the quality criteria pass or `--force`.
 
 Exit code 0: estimate accepted; 2: computed but a quality criterion failed (see `quality.reasons`).
+
+### Rigs of several cameras
+
+Each camera has its own IMU: run `scale` once per camera, with that camera's recording as `--imu`,
+one of its lenses as `--group` and its cut point as `--imu-offset`. The per-camera scales must agree,
+which is a useful check. To measure the residual time offset and the clock drift between two cameras
+on the same rigid rig from their gyroscopes (no knowledge of the mounting needed):
+
+```
+python -m imuscale.rig_sync cam_a.insv cam_b.insv --imu-offset A B --out rig_sync.png
+```
+
+It cross-correlates the angular-rate magnitudes over the whole overlap and in 20 s windows, and fits a
+line to the windowed lags (offset at t=0, drift in ppm). `video_gyro_sync` run on each camera tells
+whether the camera-IMU delay is the same on both.
 
 ### Method in brief
 
@@ -77,6 +95,7 @@ python -m imuscale.static_bias static.insv --local-g 9.806 --out bias.png   # ac
 python scripts/window_ablation.py --sparse model/sparse/0 --imu rec.insv --period 0.1 --truth 0.987
 python scripts/sim3_invariance.py --sparse model/sparse/0 --imu rec.insv --period 0.1
 python tests/test_synthetic.py      # synthetic trajectory + IMU: recovers scale, gravity, R_CB
+python tests/test_rig_sync.py       # two synthetic gyros: recovers offset and drift
 ```
 
 ## Conventions

@@ -37,10 +37,12 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sparse", type=Path, required=True); ap.add_argument("--imu", type=Path, required=True)
     ap.add_argument("--period", type=float, required=True)
+    ap.add_argument("--imu-offset", type=float, default=0.0, help="IMU time of video t=0 [s]")
     ap.add_argument("--group", default=None); ap.add_argument("--index-base", type=int, default=0)
     ap.add_argument("--truth", type=float, default=None, help="reference scale for the error column")
     args = ap.parse_args(argv)
     tg, gyr, acc, _ = load_imu(args.imu)
+    tg = tg - args.imu_offset
     _, _, IDX, Rwc, P, _ = load_frames(args.sparse, args.group, index_base=args.index_base)
     est = InertialEstimator(tg, gyr, acc, IDX, Rwc, P)
     est.fit_time_map(args.period)

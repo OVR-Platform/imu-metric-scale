@@ -5,6 +5,7 @@
 `--period` is the nominal duration, in seconds, of one unit of the frame index in the image names
 (e.g. frames extracted at 10 fps -> 0.1). It is refined from the data together with the offset.
 Alternatively give per-frame timestamps with `--frame-times times.csv` (columns: image_name,t_s).
+For a rig of several cameras, run once per camera with its own `--imu`, `--group` and `--imu-offset`.
 
 With `--write-model DIR` a scaled and levelled copy of the model is written (gravity onto -Z by default,
 first frame at the origin), only if the quality criteria pass or `--force` is given.
@@ -29,6 +30,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sparse", type=Path, required=True, help="COLMAP model directory (cameras/images/points3D .bin or .txt)")
     ap.add_argument("--imu", type=Path, required=True, help=".insv recording or CSV t_s,gx,gy,gz,ax,ay,az (deg/s, m/s^2)")
+    ap.add_argument("--imu-offset", type=float, default=0.0,
+                    help="IMU time of video t=0 [s], subtracted from the IMU clock (e.g. the cut point of a trimmed video)")
     ap.add_argument("--period", type=float, default=None, help="nominal seconds per frame-index unit")
     ap.add_argument("--offset-range", type=float, nargs=2, default=(-1.0, 1.0), metavar=("MIN", "MAX"),
                     help="offset search range in seconds (default -1 1)")
@@ -53,6 +56,7 @@ def main(argv=None) -> int:
             frame_times = {r[0]: float(r[1]) for r in csv.reader(fh) if r and not r[0].startswith(("#", "image_name"))}
 
     tg, gyr, acc, meta = load_imu(args.imu)
+    tg = tg - args.imu_offset
     log(f"IMU: {len(tg)} samples, {tg[0]:.2f}..{tg[-1]:.2f} s, {len(tg)/(tg[-1]-tg[0]):.0f} Hz {meta}")
     rec, cam, IDX, Rwc, P, names = load_frames(args.sparse, args.group, args.name_regex, args.index_base, frame_times)
     if len(IDX) > args.max_frames:
