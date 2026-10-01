@@ -43,7 +43,9 @@ def load_frames(sparse_dir: str | Path, group: str | None = None, name_regex: st
         per_cam.setdefault(key, []).append((idx, R_cw.T, -R_cw.T @ t, im.name))
     if not per_cam:
         raise RuntimeError(f"no registered image with a frame index in {sparse_dir}")
-    if group is None or group not in per_cam:
+    if group is not None and group not in per_cam:
+        raise RuntimeError(f"group {group!r} not found; groups in the model: {sorted(per_cam)}")
+    if group is None:
         group = max(per_cam, key=lambda k: len(per_cam[k]))
     frames = sorted(per_cam[group], key=lambda x: x[0])
     if len(frames) < 10:

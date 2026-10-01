@@ -185,9 +185,7 @@ class InertialEstimator:
         return self._pc[k]
 
     def make_runs(self):
-        """Contiguous runs: maximal sequences of intervals shorter than max_gap_s, cut into consecutive
-        blocks of at most `window_s` seconds (0: no cut), so that a recording without gaps still yields
-        several runs. Short windows bias the scale low, so the default (8.5 s) is the one validated."""
+        """Contiguous runs: maximal sequences of intervals shorter than max_gap_s."""
         runs, cur = [], []
         for k in range(len(self.T) - 1):
             if self.T[k + 1] - self.T[k] <= self.max_gap_s:
@@ -198,17 +196,21 @@ class InertialEstimator:
                 cur = []
         if len(cur) >= self.min_run:
             runs.append(cur)
-        if self.window_s:
-            cut = []
-            for rr in runs:
-                cur = []
-                for k in rr:
-                    if cur and self.T[k + 1] - self.T[cur[0]] > self.window_s:
-                        cut.append(cur); cur = []
-                    cur.append(k)
-                cut.append(cur)
-            runs = [rr for rr in cut if len(rr) >= self.min_run]
         return runs
+
+    def cut_runs(self, runs):
+        """Fallback for recordings with few or no gaps: cut runs into consecutive blocks of at most
+        `window_s` seconds. Not the default: windows that short bias the scale low, while the contiguous
+        runs are the construction validated against LiDAR."""
+        cut = []
+        for rr in runs:
+            cur = []
+            for k in rr:
+                if cur and self.T[k + 1] - self.T[cur[0]] > self.window_s:
+                    cut.append(cur); cur = []
+                cur.append(k)
+            cut.append(cur)
+        return [rr for rr in cut if len(rr) >= self.min_run]
 
     def solve(self, runs):
         """Joint linear solve over the given runs -> (scale, gravity, accel bias, position rms)."""
@@ -285,6 +287,11 @@ class InertialEstimator:
                 s, g, ba, rms = self.solve(runs)
             log(f"robust pass: removed {len(bad)} intervals with residual > {thr*1000:.0f} mm "
                 f"(median {np.median(vals)*1000:.0f} mm); runs now {len(runs)}")
+        # only when the validated construction cannot work (fewer usable runs than the per-run mean needs)
+        if self.window_s and sum(len(rr) >= 8 for rr in runs) < Q_MIN_SEGMENTS:
+            runs = self.cut_runs(runs)
+            log(f"too few usable contiguous runs: cut into {len(runs)} windows of at most {self.window_s:g} s")
+            s, g, ba, rms = self.solve(runs)
         return runs, s, g, ba, rms, len(bad)
 
     def scale_per_run(self, runs, min_int=8):

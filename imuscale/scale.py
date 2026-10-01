@@ -40,7 +40,7 @@ def main(argv=None) -> int:
     ap.add_argument("--name-regex", default=r"(\d+)", help="regex whose last integer match in the file name is the frame index")
     ap.add_argument("--index-base", type=int, default=0, help="subtract this from the parsed index (1 for 1-based names)")
     ap.add_argument("--window", type=float, default=8.5,
-                    help="cut contiguous runs into blocks of at most this many seconds (0: no cut; default 8.5)")
+                    help="only if there are fewer than 4 usable contiguous runs (a recording with few or no gaps), cut them into blocks of at most this many seconds (0: never; default 8.5)")
     ap.add_argument("--max-frames", type=int, default=2500, help="subsample frames above this count")
     ap.add_argument("--bootstrap", type=int, default=100)
     ap.add_argument("--out", type=Path, default=None, help="result JSON")
