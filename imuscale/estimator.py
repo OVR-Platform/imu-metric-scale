@@ -310,8 +310,14 @@ class InertialEstimator:
             if not (Q_GNORM[0] <= float(np.linalg.norm(gr)) <= Q_GNORM[1]):
                 n_bad_g += len(rr)
                 continue
-            if 0.3 < sr < 3.0:
+            if sr > 0:
                 vals.append(float(sr)); w.append(len(rr)); gs.append(np.asarray(gr, float)); idx.append(i)
+        # Gross outliers are rejected relative to the median run, not to an absolute range: the model may come
+        # in any units, and the joint solution is not a safe reference because it can fail on its own.
+        if vals:
+            med = float(np.median(vals))
+            keep = [j for j, v in enumerate(vals) if 0.3 * med < v < 3.0 * med]
+            vals, w, gs, idx = ([x[j] for j in keep] for x in (vals, w, gs, idx))
         return np.array(vals), np.array(w, float), np.array(gs).reshape(-1, 3), np.array(idx, int), n_bad_g
 
 
