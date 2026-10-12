@@ -8,7 +8,7 @@ Alternatively give per-frame timestamps with `--frame-times times.csv` (columns:
 For a rig of several cameras, run once per camera with its own `--imu`, `--group` and `--imu-offset`.
 
 With `--write-model DIR` a scaled and levelled copy of the model is written (gravity onto -Z by default,
-first frame at the origin), only if the quality criteria pass or `--force` is given.
+first frame at the origin), whatever the quality criteria say; with `--check` only if they pass.
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def main(argv=None) -> int:
     ap.add_argument("--out", type=Path, default=None, help="result JSON")
     ap.add_argument("--write-model", type=Path, default=None, help="write scaled + levelled model copy here")
     ap.add_argument("--down", type=float, nargs=3, default=(0, 0, -1), help="direction gravity is mapped onto (default 0 0 -1)")
-    ap.add_argument("--force", action="store_true", help="write the model even if quality criteria fail")
+    ap.add_argument("--check", action="store_true", help="write the model only if the quality criteria pass")
     args = ap.parse_args(argv)
     t0 = time.time()
 
@@ -76,13 +76,13 @@ def main(argv=None) -> int:
     result.update({"sparse": str(args.sparse), "imu": str(args.imu), "group": cam, "elapsed_s": round(time.time() - t0, 1)})
 
     if args.write_model is not None:
-        if result["quality"]["ok"] or args.force:
+        if result["quality"]["ok"] or not args.check:
             R, t = write_scaled_model(rec, args.write_model, result["scale"], np.asarray(result["gravity_model_frame"]),
                                       down=args.down, origin=P[0])
             result["written_model"] = {"dir": str(args.write_model), "sim3": {"scale": result["scale"], "R": R.tolist(), "t": t.tolist()}}
             log(f"wrote scaled model to {args.write_model}")
         else:
-            log("quality criteria failed: model not written (use --force to override)")
+            log("quality criteria failed: model not written (--check)")
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         with open(args.out, "w") as fh:

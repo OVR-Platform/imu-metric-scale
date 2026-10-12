@@ -41,7 +41,7 @@ python -m imuscale.scale --sparse model/sparse/0 --imu recording.insv --period 0
   rewriting the IMU record (e.g. cut to a common start with an edit list): the IMU keeps the original
   timeline, so pass the cut point.
 * `--write-model DIR`: write a scaled and levelled copy (gravity onto `--down`, default -Z; first frame
-  at the origin), only if the quality criteria pass or `--force`.
+  at the origin), even if the quality criteria fail (exit code 2 still reports it); with `--check` only if they pass.
 
 Exit code 0: estimate accepted; 2: computed but a quality criterion failed (see `quality.reasons`).
 
