@@ -63,6 +63,10 @@ def main(argv=None) -> int:
     rec, cam, IDX, Rwc, P, names = load_frames(args.sparse, args.group, args.name_regex, args.index_base, frame_times)
     if len(IDX) > args.max_frames:
         step = int(np.ceil(len(IDX) / args.max_frames))
+        # keep subsampled intervals under InertialEstimator's max_gap_s (1.2 s), or the hand-eye fit has no
+        # pairs: a TimeShift video at 0.334 s/frame with step 6 gives 2 s intervals
+        dt = (1.0 if frame_times is not None else args.period) * float(np.median(np.diff(IDX)))
+        step = max(1, min(step, int(1.2 // dt)))
         IDX, Rwc, P = IDX[::step], Rwc[::step], P[::step]
         log(f"subsampling 1 frame in {step}: {len(IDX)} frames")
 
