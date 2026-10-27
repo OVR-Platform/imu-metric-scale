@@ -63,30 +63,26 @@ class InertialEstimator:
         self._pc = {}
 
     # ------------------------------------------------------------------ hand-eye / time map
-    def gyro_rot(self, t0, t1):
-        tg = self.tg
-        i0 = min(max(np.searchsorted(tg, t0), 0), len(tg) - 1)
-        i1 = min(max(np.searchsorted(tg, t1), 0), len(tg) - 1)
-        return self.Rcum[i0].T @ self.Rcum[i1]
+    def gyro_rots(self, t0, t1):
+        """Gyro rotations R(t0)^T R(t1) for arrays of interval bounds."""
+        i0 = np.clip(np.searchsorted(self.tg, t0), 0, len(self.tg) - 1)
+        i1 = np.clip(np.searchsorted(self.tg, t1), 0, len(self.tg) - 1)
+        return np.einsum("nji,njk->nik", self.Rcum[i0], self.Rcum[i1])
 
     def handeye(self, a, b):
         """Rotation vectors of consecutive-frame SfM rotations vs gyro rotations under t = a*idx + b.
-        -> (R_CB, median residual [deg], residuals)."""
-        IDX, Rwc = self.IDX, self.Rwc
-        rc, rb = [], []
-        for k in range(len(IDX) - 1):
-            if (IDX[k + 1] - IDX[k]) * a > self.max_gap_s:
-                continue
-            t0, t1 = a * IDX[k] + b, a * IDX[k + 1] + b
-            if t0 < self.tg[0] - 0.5 or t1 > self.tg[-1] + 0.5:
-                continue
-            rc.append(Rot.from_matrix(Rwc[k].T @ Rwc[k + 1]).as_rotvec())
-            rb.append(Rot.from_matrix(self.gyro_rot(t0, t1)).as_rotvec())
-        if len(rc) < 10:
+        -> (R_CB, median residual [deg], residuals). Vectorized: the time map search calls it ~3600 times."""
+        IDX, Rwc, tg = self.IDX, self.Rwc, self.tg
+        k = np.arange(len(IDX) - 1)
+        t0, t1 = a * IDX[:-1] + b, a * IDX[1:] + b
+        ok = ((IDX[1:] - IDX[:-1]) * a <= self.max_gap_s) & (t0 >= tg[0] - 0.5) & (t1 <= tg[-1] + 0.5)
+        k, t0, t1 = k[ok], t0[ok], t1[ok]
+        if len(k) < 10:
             return None, np.inf, np.array([])
-        rc, rb = np.array(rc), np.array(rb)
+        rc = Rot.from_matrix(np.einsum("nji,njk->nik", Rwc[k], Rwc[k + 1])).as_rotvec()
+        rb = Rot.from_matrix(self.gyro_rots(t0, t1)).as_rotvec()
         R = kabsch(rb, rc)
-        err = np.rad2deg(np.linalg.norm(rc - (R @ rb.T).T, axis=1))
+        err = np.rad2deg(np.linalg.norm(rc - rb @ R.T, axis=1))
         return R, float(np.median(err)), err
 
     def fit_time_map(self, period, offset_range=(-1.0, 1.0), period_tol=0.004):
@@ -142,18 +138,15 @@ class InertialEstimator:
             return float("nan")
         T = self.T
         out = []
-        for ks in (range(0, n // 4), range(3 * n // 4, n)):
-            rc, kk = [], []
-            for k in ks:
-                if T[k + 1] - T[k] <= self.max_gap_s:
-                    rc.append(Rot.from_matrix(self.Rwc[k].T @ self.Rwc[k + 1]).as_rotvec()); kk.append(k)
+        for ks in (np.arange(0, n // 4), np.arange(3 * n // 4, n)):
+            kk = ks[T[ks + 1] - T[ks] <= self.max_gap_s]
             if len(kk) < 10:
                 return float("nan")
-            rc = np.array(rc)
+            rc = Rot.from_matrix(np.einsum("nji,njk->nik", self.Rwc[kk], self.Rwc[kk + 1])).as_rotvec()
             best = None
             for db in np.arange(-0.5, 0.501, 0.01):
-                rb = np.array([Rot.from_matrix(self.gyro_rot(T[k] + db, T[k + 1] + db)).as_rotvec() for k in kk])
-                err = float(np.median(np.linalg.norm(rc - (self.R_CB @ rb.T).T, axis=1)))
+                rb = Rot.from_matrix(self.gyro_rots(T[kk] + db, T[kk + 1] + db)).as_rotvec()
+                err = float(np.median(np.linalg.norm(rc - rb @ self.R_CB.T, axis=1)))
                 if best is None or err < best[0]:
                     best = (err, db)
             out.append(best[1])
